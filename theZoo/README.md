@@ -1,276 +1,290 @@
-theZoo Pipeline — Extração, Envio ao VirusTotal e Ranking
+# theZoo Pipeline · Extração → VirusTotal → Ranking ⚙️🧪
 
-Pipeline simples (um único script Python) que:
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](#)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Kali-informational)](#)
+[![7z](https://img.shields.io/badge/Needs-7--Zip-important)](#)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](#)
+[![Status](https://img.shields.io/badge/Usage-Lab%20%2F%20VM%20only-red)](#)
 
-Baixa o repositório ytisf/theZoo via wget
+Pipeline em **um script Python** para:
 
-Extrai as famílias em malware/Binaries (7-Zip), com seleção interativa (timeout de 5 min; sem resposta = todas)
+1. **Baixar** o repositório [`ytisf/theZoo`](https://github.com/ytisf/theZoo) via `wget`
+2. **Extrair** famílias de `malware/Binaries` com seleção interativa (timeout **5 min**)
+3. **Enviar** os arquivos extraídos ao **VirusTotal** (ignora **.txt**, **ocultos**, **symlinks**)
+4. **Gerar** um **ranking** em **XLSX** por antivírus
 
-Envia todos os arquivos extraídos de cada malware para o VirusTotal (ignora .txt, symlinks e arquivos ocultos)
+> \[!WARNING]
+> **Malware em ambiente de laboratório**: use **apenas** em VM/host isolado, sem sincronização de pastas, sem *thumbnails*, e **nunca execute** as amostras.
 
-Gera um ranking em XLSX por antivírus com base nos resultados do VirusTotal
+---
 
-⚠️ Atenção: este projeto lida com amostras de malware. Use apenas em ambientes isolados (VM), sem sincronia de pastas, com thumbnail preview desativado, filesystem com noexec quando possível, e nunca execute as amostras.
+## 📑 Sumário
 
-✨ Recursos
+* [Visão Rápida](#-visão-rápida)
+* [Fluxo (Mermaid)](#-fluxo-mermaid)
+* [Estrutura de Pastas](#-estrutura-de-pastas)
+* [Requisitos](#-requisitos)
+* [Instalação](#-instalação)
 
-Fetch & Extract
+  * [Virtualenv (recomendado)](#virtualenv-recomendado)
+  * [APT (sistema)](#apt-sistema)
+* [Configuração](#-configuração)
+* [Uso](#-uso)
 
-Download via wget e extração via unzip/zipfile
+  * [Tudo em uma passada](#tudo-em-uma-passada)
+  * [Etapas separadas](#etapas-separadas)
+  * [Selecionar famílias](#selecionar-famílias)
+  * [Paralelismo](#paralelismo)
+* [Parâmetros & Comportamento](#-parâmetros--comportamento)
+* [Troubleshooting](#-troubleshooting)
+* [Segurança](#-segurança)
+* [Licença & Créditos](#-licença--créditos)
+* [Roadmap](#-roadmap)
 
-Localiza malware/Binaries/binaries
+---
 
-Lista famílias e aguarda 5 minutos por opção do usuário (ex.: 0,2,5); se não houver resposta, extrai todas
+## ⚡ Visão Rápida
 
-Extração com 7z (suporte a .zip, .7z, .rar, .tar.*)
-
-Flatten: por padrão, extrai direto para ~/theZoo_simple/extracted/<Família>/
-
-Fase final inline: se ainda restarem zips/7z/rar no diretório da família, extrai ali mesmo
-
-Envio ao VirusTotal (API v3)
-
-Consulta por hash (SHA-256); se não existir, faz upload e opcionalmente aguarda a análise
-
-Salva um JSON por arquivo em ~/theZoo_simple/VirusTotal/<Família>/<Malware>/<arquivo>.json
-
-Ignora .txt, arquivos ocultos (qualquer segmento do caminho começando com .) e symlinks
-
-Respeita rate limit (por padrão ~4 req/min — configurável)
-
-Ranking XLSX
-
-Lê os JSONs e monta ranking por antivírus com colunas Detectado / Não Detectado / Omissos (em % e absoluto)
-
-Ordena por % Detectado desc (e % Omisso asc como critério secundário)
-
-Gera VirusTotal_Ranking.xlsx
-
-🗂️ Estrutura de diretórios
-~/theZoo_simple/
-├─ theZoo.zip
-├─ theZoo-<branch>/           # repositório baixado e extraído
-├─ extracted/                 # saída da extração por família
-│  ├─ W32.Beagle/
-│  │  ├─ <arquivos extraídos / subpastas> …
-│  └─ All.ElectroRAT/
-│     └─ 0468127a19da.../ …
-└─ VirusTotal/                # JSONs por arquivo enviado ao VT
-   ├─ W32.Beagle/
-   │  └─ <MalwareDir>/
-   │     └─ <arquivo>.json
-   └─ All.ElectroRAT/
-      └─ 0468127a19da.../
-         └─ <arquivo>.json
-
-🔧 Pré-requisitos
-Sistema
-
-Linux (testado no Kali)
-
-wget, unzip, p7zip-full (7z)
-
-Python 3.9+
-
+```bash
+# deps de sistema
 sudo apt update
-sudo apt install -y wget unzip p7zip-full
+sudo apt install -y wget unzip p7zip-full python3-venv
 
-Bibliotecas Python
-
-Você tem duas opções (por causa do PEP 668 no Kali):
-
-A) Virtualenv (recomendado)
-
-sudo apt install -y python3-venv
+# venv (recomendado)
 python3 -m venv ~/.venvs/thezoo
 source ~/.venvs/thezoo/bin/activate
 pip install --upgrade pip
 pip install requests pandas openpyxl
 
-
-B) Pacotes do sistema (apt)
-
-sudo apt install -y python3-requests python3-pandas python3-openpyxl
-
-
-Evite --break-system-packages a menos que esteja em VM descartável.
-
-VirusTotal API Key
-
-Crie/exporte a variável:
-
+# chave do VirusTotal
 export VT_API_KEY="SUA_CHAVE_DO_VT"
 
-
-Conta gratuita tem limites (≈4 req/min e cotas diárias).
-
-🚀 Uso
-
-Salve o script unificado como thezoo_pipeline.py.
-
-Rodar tudo (fetch + send + rank)
+# rodar tudo
 python3 thezoo_pipeline.py all
+```
 
-Etapas separadas
-# 1) Baixar/Extrair famílias
-python3 thezoo_pipeline.py fetch_extract
+> \[!TIP]
+> Em ambientes com PEP 668 (Kali/Debian), prefira **venv** ou instale libs via **APT**.
 
-# 2) Enviar ao VirusTotal (ignora .txt/ocultos/symlinks)
-python3 thezoo_pipeline.py send
+---
 
-# 3) Gerar ranking XLSX
-python3 thezoo_pipeline.py rank
+## 🧭 Fluxo (Mermaid)
 
-Selecionar famílias
+```mermaid
+flowchart LR
+    A[fetch_extract] -->|wget + unzip| B(theZoo extraído)
+    B --> C{Selecionar famílias<br/>(input 5 min)}
+    C -->|sem resposta| D[Extrair todas]
+    C -->|índices/nome| E[Extrair selecionadas]
+    D --> F[extracted/<Família>/...]
+    E --> F
+    F --> G[send → VT API]
+    G -->|hash existe| H[Salva JSON]
+    G -->|upload| I[aguarda análise?]
+    I --> H
+    H --> J[rank → XLSX]
+```
 
-Por índice (exibido no prompt):
+---
 
-python3 thezoo_pipeline.py fetch_extract --choose "0,2,5"
+## 📂 Estrutura de Pastas
 
+```
+~/theZoo_simple/
+├─ theZoo.zip
+├─ theZoo-<branch>/
+├─ extracted/                      # saída por família
+│  ├─ W32.Beagle/
+│  └─ All.ElectroRAT/0468127a.../
+└─ VirusTotal/                     # JSON por arquivo (VT v3)
+   ├─ W32.Beagle/<MalwareDir>/<arquivo>.json
+   └─ All.ElectroRAT/0468127a.../<arquivo>.json
+```
 
-Por nome:
+---
 
-python3 thezoo_pipeline.py fetch_extract --families "Zeus,Emotet"
+## 🧰 Requisitos
 
-Ajustar paralelismo da extração
-python3 thezoo_pipeline.py fetch_extract --workers 8
-python3 thezoo_pipeline.py all --workers 8
+**Sistema**
 
-⚙️ Parâmetros e comportamento
-Extração
+```bash
+sudo apt update
+sudo apt install -y wget unzip p7zip-full
+```
 
-Senha padrão para arquivos protegidos: infected
+**Python 3.9+**
 
-Flatten: arquivos são extraídos diretamente no diretório da família
+* `requests` (envio ao VT)
+* `pandas` + `openpyxl` (ranking XLSX)
 
-Fase final inline: qualquer .zip/.7z/.rar remanescente no nível da família é extraído no próprio diretório da família
+---
 
-Timeout do prompt: 5 minutos — sem resposta => extrai todas as famílias
+## 🧩 Instalação
 
-Envio ao VirusTotal
+### Virtualenv (recomendado)
 
-Ignorados: *.txt, arquivos ocultos (ex.: .DS_Store, .cache/...) e symlinks
-
-Fluxo:
-
-Calcula SHA-256 e tenta GET /files/{sha256}
-
-Se 404: faz POST /files (upload)
-
-Opcional: aguarda análise (GET /analyses/{id} até completed ou timeout)
-
-Busca o report e salva JSON por arquivo
-
-Rate limit: SLEEP_BETWEEN_CALLS = 16s (ajuste se tiver plano pago)
-
-Aguardar análise: WAIT_FOR_ANALYSIS = True (pode deixar False para ir mais rápido e rodar depois novamente)
-
-Ranking (.xlsx)
-
-Lê VirusTotal/<Família>/<Malware>/<arquivo>.json (formato API v3)
-
-Converte resultados por engine:
-
-Detectado: category ∈ {malicious, suspicious}
-
-Não Detectado: category ∈ {harmless, undetected}
-
-Omisso: timeout, failure, type-unsupported ou engine ausente
-
-Denominador = total de arquivos
-
-Gera VirusTotal_Ranking.xlsx com abas “Resultados …” e “Resumo”
-
-🧪 Exemplos rápidos
-Rodar apenas envio e ranking (sem re-extrair)
-python3 thezoo_pipeline.py send
-python3 thezoo_pipeline.py rank
-
-Re-executar para consolidar JSONs pendentes
-
-Se alguns ficaram “em análise” (pendentes no VT), rode novamente:
-
-python3 thezoo_pipeline.py send
-
-🧯 Troubleshooting
-error: externally-managed-environment
-
-Use venv ou instale via apt:
-
-# venv (recomendado)
+```bash
 sudo apt install -y python3-venv
 python3 -m venv ~/.venvs/thezoo
 source ~/.venvs/thezoo/bin/activate
+pip install --upgrade pip
 pip install requests pandas openpyxl
+```
 
+> Para sair do venv: `deactivate`.
 
-ou
+### APT (sistema)
 
+```bash
 sudo apt install -y python3-requests python3-pandas python3-openpyxl
+```
 
-NameError: name 'requests' is not defined
+---
 
-Instale requests (veja acima) e importe no topo do script:
+## 🔧 Configuração
 
-import requests
+Defina sua **API key** do VirusTotal:
 
-7z não encontrado
-
-Instale:
-
-sudo apt install -y p7zip-full
-
-VT_API_KEY não definida
+```bash
 export VT_API_KEY="SUA_CHAVE_DO_VT"
+```
 
-Rate limit (429) / timeouts
+> \[!CAUTION]
+> Não faça *commit* da sua chave. Use variáveis de ambiente ou `.env` (fora do controle de versão).
 
-Aumente SLEEP_BETWEEN_CALLS (ex.: 20–30 s)
+---
 
-Desative WAIT_FOR_ANALYSIS para acelerar e consolide em outra execução
+## ▶️ Uso
 
-🔐 Boas práticas de segurança
+> Salve o script unificado como `thezoo_pipeline.py`.
 
-Trabalhe em VM isolada; não sincronize ~/theZoo_simple com nuvens (Drive/Dropbox etc.)
+### Tudo em uma passada
 
-Desative pré-visualizações automáticas de arquivos
+```bash
+python3 thezoo_pipeline.py all
+```
 
-Monte partição com noexec se possível para o diretório de trabalho
+### Etapas separadas
 
-Nunca execute os binários extraídos
+```bash
+python3 thezoo_pipeline.py fetch_extract   # baixar + extrair
+python3 thezoo_pipeline.py send            # enviar ao VT (ignora .txt/ocultos/symlinks)
+python3 thezoo_pipeline.py rank            # gerar XLSX
+```
 
-Respeite licenças e termos do VirusTotal; os uploads podem ser públicos
+### Selecionar famílias
 
-⚖️ Licença & Créditos
+Por **índice**:
 
-Este pipeline é um wrapper prático em torno do repositório theZoo (créditos: ytisf e contribuidores).
+```bash
+python3 thezoo_pipeline.py fetch_extract --choose "0,2,5"
+```
 
-Integra com a VirusTotal API v3 (© Google / Chronicle). Respeite os Termos de Uso do serviço.
+Por **nome**:
 
-O código deste pipeline pode ser usado sob licença MIT (adapte conforme sua necessidade).
+```bash
+python3 thezoo_pipeline.py fetch_extract --families "Zeus,Emotet"
+```
 
-📝 Roadmap (ideias)
+### Paralelismo
 
-Flag --no-wait/--vt-sleep via CLI (expor configs do VT no CLI)
+```bash
+python3 thezoo_pipeline.py fetch_extract --workers 8
+python3 thezoo_pipeline.py all --workers 8
+```
 
-Inventário CSV/JSON das famílias/arquivos extraídos
+---
 
-Cache de hash → pular uploads de arquivos já processados localmente
+## ⚙️ Parâmetros & Comportamento
 
-Logs estruturados (JSON) e opção --quiet/--verbose
+| Área       | Chave/Comportamento |              Valor padrão | Notas                                   |
+| ---------- | ------------------- | ------------------------: | --------------------------------------- |
+| Diretórios | Base de trabalho    |         `~/theZoo_simple` | ZIP, extração e resultados              |
+| Extração   | Senha               |                `infected` | Padrão do theZoo                        |
+| Extração   | Flatten             |                  **True** | Extrai direto em `extracted/<Família>/` |
+| Extração   | Timeout prompt      |                 **5 min** | Sem resposta ⇒ todas                    |
+| Envio VT   | Ignorados           | `.txt`, ocultos, symlinks | Filtro por caminho/arquivo              |
+| Envio VT   | Esperar análise     |                  **True** | Pode desativar no script p/ agilizar    |
+| Envio VT   | Ritmo (API pública) | `SLEEP_BETWEEN_CALLS=16s` | Ajuste conforme plano                   |
+| Ranking    | Saída               | `VirusTotal_Ranking.xlsx` | Em diretório atual                      |
 
-🧭 Comandos de referência (cola rápida)
-# deps
-sudo apt install -y wget unzip p7zip-full python3-venv
+**Lógica de ranking (VT v3)**
+
+* **Detectado**: `category ∈ {malicious, suspicious}`
+* **Não Detectado**: `category ∈ {harmless, undetected}`
+* **Omisso**: `timeout`, `failure`, `type-unsupported` ou engine ausente
+* Denominador = **total de arquivos**
+
+---
+
+## 🧯 Troubleshooting
+
+<details>
+<summary><b>error: externally-managed-environment (PEP 668)</b></summary>
+
+Use **venv** (recomendado) ou instale via APT:
+
+```bash
+sudo apt install -y python3-venv
 python3 -m venv ~/.venvs/thezoo && source ~/.venvs/thezoo/bin/activate
 pip install requests pandas openpyxl
-
-# api key
-export VT_API_KEY="SUA_CHAVE_DO_VT"
-
-# pipeline
-python3 thezoo_pipeline.py all
 # ou
-python3 thezoo_pipeline.py fetch_extract --choose "0,2,5"
-python3 thezoo_pipeline.py send
-python3 thezoo_pipeline.py rank
+sudo apt install -y python3-requests python3-pandas python3-openpyxl
+```
+
+</details>
+
+<details>
+<summary><b>NameError: requests is not defined</b></summary>
+
+Instale `requests` e confirme `import requests` no topo do script.
+
+</details>
+
+<details>
+<summary><b>7z não encontrado</b></summary>
+
+```bash
+sudo apt install -y p7zip-full
+```
+
+</details>
+
+<details>
+<summary><b>Muitos 429 / timeouts no VirusTotal</b></summary>
+
+* Aumente `SLEEP_BETWEEN_CALLS` (ex.: 20–30s)
+* Desative espera de análise (coloque `WAIT_FOR_ANALYSIS=False`) e rode `send` novamente depois para consolidar
+
+</details>
+
+---
+
+## 🛡️ Segurança
+
+* Rodar em **VM isolada**; **não** sincronize `~/theZoo_simple` (Drive/Dropbox)
+* Desativar **pré-visualizações**/thumbnails
+* Preferir volume com `noexec` para o diretório de trabalho
+* **Nunca** abrir/executar os binários extraídos
+* Respeitar **ToS** do VirusTotal (uploads podem ser públicos)
+
+---
+
+## 📜 Licença & Créditos
+
+* Wrapper em torno de **[theZoo](https://github.com/ytisf/theZoo)** — créditos a *ytisf* e contribuidores
+* Integração com **VirusTotal API v3** (© Google/Chronicle)
+* Código deste pipeline: **MIT**
+
+---
+
+## 🗺️ Roadmap
+
+* Flags CLI para `--no-wait`/`--vt-sleep`
+* Inventário CSV/JSON das famílias/artefatos extraídos
+* Cache local de hash para pular reenvios
+* Logs estruturados (JSON) e `--quiet/--verbose`
+
+---
+
+> Curtiu? Abra um PR/issue com melhorias ou ideias ✨
