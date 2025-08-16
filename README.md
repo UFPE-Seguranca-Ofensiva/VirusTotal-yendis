@@ -58,6 +58,7 @@ flowchart LR
     H --> J[rank → XLSX]
 ```
 
+
 **Recursos chave**
 
 * Baixa **ytisf/theZoo** via `wget` e extrai com `unzip`/`7z`
@@ -289,6 +290,7 @@ flowchart LR
     I --> H
     H --> J[rank → XLSX]
 ```
+
 
 **Key Features**
 
