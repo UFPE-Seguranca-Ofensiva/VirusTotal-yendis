@@ -32,7 +32,6 @@ def status_engine(entry: Optional[dict]) -> Optional[bool]:
         return True
     if cat in ("harmless", "undetected"):
         return False
-    # timeout, failure, type-unsupported, e quaisquer outros -> omisso
     return None
 
 def tabela_files(file_json_path: Path) -> Dict[str, Optional[bool]]:
@@ -45,7 +44,6 @@ def tabela_files(file_json_path: Path) -> Dict[str, Optional[bool]]:
     if not data:
         return {}
 
-    # Suporta dois formatos: (a) já é 'data', (b) é o envelope com {"data": {...}}
     if "attributes" not in data and "data" in data and isinstance(data["data"], dict):
         data = data["data"]
 
