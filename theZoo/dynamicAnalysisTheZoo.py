@@ -18,17 +18,17 @@ OUT_EXTRACT = WORKDIR / "extracted"
 OUT_VT = WORKDIR / "VirusTotal"
 ZIP_URL = "https://codeload.github.com/ytisf/theZoo/zip/refs/heads/master"
 ZIP_FILE = WORKDIR / "theZoo.zip"
-PASS = "infected"                # senha padrão theZoo
-PROMPT_SECS = 300                # 5 minutos
+PASS = "infected"                
+PROMPT_SECS = 300                
 DEFAULT_WORKERS = max(2, os.cpu_count() or 2)
 ARCHIVE_EXTS = (".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2")
-FLATTEN = True                   # extrair direto em OUT_EXTRACT/<Família>/
+FLATTEN = True                   
 # VirusTotal
 VT_API_KEY = os.getenv("VT_API_KEY")
 BASE_URL = "https://www.virustotal.com/api/v3"
-SLEEP_BETWEEN_CALLS = 16         # API pública: ~4 req/min
-ANALYSIS_TIMEOUT = 300           # 5 min
-WAIT_FOR_ANALYSIS = True         # aguardar término da análise após upload?
+SLEEP_BETWEEN_CALLS = 16        
+ANALYSIS_TIMEOUT = 300           
+WAIT_FOR_ANALYSIS = True         
 # -----------------------------
 
 # ========= utilidades gerais =========
@@ -48,7 +48,6 @@ def is_hidden(p: Path) -> bool:
     return any(part.startswith(".") for part in p.parts)
 
 def should_skip_upload(p: Path) -> bool:
-    # ignora .txt (qualquer caso), ocultos e symlinks
     if p.is_symlink():
         return True
     if p.suffix.lower() == ".txt":
@@ -66,11 +65,9 @@ def unique_dest(dest_dir: Path, filename: str) -> Path:
         i += 1
     return cand
 
-# ========= FETCH + EXTRACT =========
 def ensure_repo() -> Path:
     WORKDIR.mkdir(parents=True, exist_ok=True)
 
-    # 1) Baixar ZIP com wget
     if not ZIP_FILE.exists():
         if not have("wget"):
             sys.exit("Erro: 'wget' não encontrado no PATH.")
@@ -79,7 +76,6 @@ def ensure_repo() -> Path:
     else:
         print("[1/3] ZIP já existe, pulando download.")
 
-    # 2) Extrair se a pasta ainda não existir
     repo_root = None
     for p in WORKDIR.iterdir():
         if p.is_dir() and p.name.lower().startswith("thezoo"):
@@ -87,7 +83,6 @@ def ensure_repo() -> Path:
             break
     if repo_root is None:
         if not have("unzip"):
-            # fallback básico em zipfile
             print("[2/3] Extraindo (zipfile)…")
             with zipfile.ZipFile(ZIP_FILE, 'r') as zf:
                 zf.extractall(WORKDIR)
@@ -121,7 +116,6 @@ def list_families(bin_dir: Path) -> List[Path]:
     return fams
 
 def prompt_choice(fams: List[Path], choose_indices: Optional[str] = None, families_filter: Optional[str] = None) -> List[Path]:
-    # permitir seleção via parâmetros (sem prompt)
     if families_filter:
         names = {n.strip().lower() for n in families_filter.split(",") if n.strip()}
         picked = [f for f in fams if f.name.lower() in names]
@@ -141,7 +135,6 @@ def prompt_choice(fams: List[Path], choose_indices: Optional[str] = None, famili
     print(f"\nEscolha índices separados por vírgula (ex: 0,2,5).")
     print(f"Se não responder em {PROMPT_SECS//60} minutos, vou extrair TODAS. (timeout: {PROMPT_SECS}s)")
 
-    # input com timeout (Unix) via select
     choice = ""
     try:
         import select
@@ -160,7 +153,7 @@ def prompt_choice(fams: List[Path], choose_indices: Optional[str] = None, famili
             choice = ""
 
     if not choice:
-        print("\n⚠️ Sem resposta — extraindo TODAS.")
+        print("\nSem resposta — extraindo TODAS.")
         return fams
 
     picked = []
@@ -406,7 +399,7 @@ def status_engine(entry: Optional[dict]) -> Optional[bool]:
         return True
     if cat in ("harmless", "undetected"):
         return False
-    return None  # timeout/failure/type-unsupported/ausente
+    return None
 
 def tabela_files(file_json_path: Path) -> Dict[str, Optional[bool]]:
     data = ler_json(file_json_path)
@@ -467,7 +460,7 @@ def build_rank_xlsx():
     df = pd.DataFrame(rows).set_index("Antivírus")
     df.sort_values(by=["Detectado", "Omisso"], ascending=[False, True], inplace=True)
 
-    out_xlsx = f"{OUT_VT.name}_Ranking.xlsx"  # "VirusTotal_Ranking.xlsx"
+    out_xlsx = f"{OUT_VT.name}_Ranking.xlsx"
     with pd.ExcelWriter(out_xlsx, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name=f"Resultados {OUT_VT.name}")
         meta = pd.DataFrame([{"Total de arquivos": total_files, "Arquivos (JSON)": len(arquivos)}])
@@ -500,19 +493,15 @@ def parse_args():
     p = argparse.ArgumentParser(description="Pipeline theZoo -> Extração -> VirusTotal -> Ranking")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    # fetch_extract
     se = sub.add_parser("fetch_extract", help="Baixar/Extrair e selecionar famílias")
     se.add_argument("--choose", help="Índices separados por vírgula (ex: 0,2,5)", default=None)
     se.add_argument("--families", help="Nomes de famílias separados por vírgula (ex: Zeus,Emotet)", default=None)
     se.add_argument("--workers", type=int, default=DEFAULT_WORKERS, help="Threads para extração (padrão: CPUs)")
 
-    # send
     ss = sub.add_parser("send", help="Enviar arquivos extraídos ao VirusTotal (ignora .txt/ocultos)")
 
-    # rank
     sr = sub.add_parser("rank", help="Gerar ranking .xlsx a partir dos JSONs do VT")
 
-    # all
     sa = sub.add_parser("all", help="Executa fetch_extract + send + rank")
     sa.add_argument("--choose", help="Índices separados por vírgula", default=None)
     sa.add_argument("--families", help="Nomes de famílias separados por vírgula", default=None)
@@ -521,7 +510,7 @@ def parse_args():
     return p.parse_args()
 
 if __name__ == "__main__":
-    import shutil  # para which
+    import shutil
 
     args = parse_args()
     try:
