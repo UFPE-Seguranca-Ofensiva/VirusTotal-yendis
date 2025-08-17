@@ -46,7 +46,7 @@ A estrutura na imagem enviada e/ou típica deste repo:
 ```mermaid
 flowchart LR
     A[fetch_extract] -->|wget + unzip| B(theZoo extraído)
-    B --> C{Selecionar famílias<br/>(timeout 5 min)}
+    B --> C{Selecionar famílias\n(timeout 5 min)}
     C -->|sem resposta| D[Extrair todas]
     C -->|índices/nomes| E[Extrair selecionadas]
     D --> F[extracted/<Família>/...]
@@ -279,7 +279,7 @@ The structure in the image sent and/or typical of this repo:
 ```mermaid
 flowchart LR
     A[fetch_extract] -->|wget + unzip| B(theZoo extracted)
-    B --> C{Select families<br/>(timeout 5 min)}
+    B --> C{Select families\n(timeout 5 min)}
     C -->|no response| D[Extract all]
     C -->|indices/names| E[Extract selected]
     D --> F[extracted/<Family>/...]

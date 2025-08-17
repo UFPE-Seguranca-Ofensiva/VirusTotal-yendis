@@ -73,7 +73,7 @@ python3 dynamicAnalysisTheZoo.py all
 ```mermaid
 flowchart LR
     A[fetch_extract] -->|wget + unzip| B(theZoo extraído)
-    B --> C{Selecionar famílias<br/>(timeout 5 min)}
+    B --> C{Selecionar famílias\n(timeout 5 min)}
     C -->|sem resposta| D[Extrair todas]
     C -->|índices/nome| E[Extrair selecionadas]
     D --> F[extracted/<Família>/...]
@@ -368,7 +368,7 @@ python3 dynamicAnalysisTheZoo.py all
 ```mermaid
 flowchart LR
     A[fetch_extract] -->|wget + unzip| B(theZoo extracted)
-    B --> C{Select families<br/>(timeout 5 min)}
+    B --> C{Select families\n(timeout 5 min)}
     C -->|no response| D[Extract all]
     C -->|indices/name| E[Extract selected]
     D --> F[extracted/<Family>/...]
